@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  db:
+    image: mariadb
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: qrcode
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - data:/var/lib/mysql
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8085:8085
+  api:
+    depends_on:
+      - db
+    build: ./api
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./api:/usr/src/app
+    command: air ./main.go -b 0.0.0.0
+volumes:
+  data:
