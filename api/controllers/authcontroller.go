@@ -13,6 +13,28 @@ type TokenRequest struct {
 	Password string `json:"password"`
 }
 
+type TokenResponse struct {
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+func UserInfo(context *gin.Context) {
+	var user models.User
+
+	claims := auth.DecodeToken(context.GetHeader("Authorization"))
+	record := database.Instance.Where("email = ?", claims.(*auth.JWTClaim).Email).First(&user)
+
+	if record.Error != nil {
+		context.JSON(http.StatusNotFound, gin.H{"error": "Can't find user data"})
+		context.Abort()
+		return
+	}
+
+	context.JSON(http.StatusOK, gin.H{"user": user})
+	//context.JSON(http.StatusOK, user)
+
+}
+
 func GenerateToken(context *gin.Context) {
 	var request TokenRequest
 	var user models.User
@@ -25,14 +47,14 @@ func GenerateToken(context *gin.Context) {
 
 	record := database.Instance.Where("email = ?", request.Email).First(&user)
 	if record.Error != nil {
-		context.JSON(http.StatusInternalServerError, gin.H{"error": record.Error.Error()})
+		context.JSON(http.StatusNotFound, gin.H{"error": "User or password not found"})
 		context.Abort()
 		return
 	}
 
 	credentialError := user.CheckPassword(request.Password)
 	if credentialError != nil {
-		context.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid Credentials"})
+		context.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid Credentials"})
 		context.Abort()
 		return
 	}
@@ -44,6 +66,11 @@ func GenerateToken(context *gin.Context) {
 		return
 	}
 
-	context.JSON(http.StatusOK, gin.H{"token": tokenString})
+	refreshToken, err := auth.GenerateRefreshToken()
+
+	context.JSON(http.StatusOK, TokenResponse{
+		Token:        tokenString,
+		RefreshToken: refreshToken,
+	})
 
 }
