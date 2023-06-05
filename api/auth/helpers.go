@@ -2,6 +2,8 @@ package auth
 
 import (
 	"errors"
+	"qrcode-login/database"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -29,12 +31,24 @@ func GenerateJWT(email string, username string) (tokenString string, err error) 
 	return
 }
 
-func ValidateToken(signedToken string) (err error) {
-	token, err := jwt.ParseWithClaims(signedToken, &JWTClaim{},
-		func(token *jwt.Token) (interface{}, error) {
-			return []byte(jwtKey), nil
+func GenerateRefreshToken() (tokenString string, err error) {
+
+	//I'm returning a new JWT but this is not really necessary
+	expirationTime := time.Now().Add(1 * time.Hour)
+	claims := &JWTClaim{
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: expirationTime.Unix(),
 		},
-	)
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err = token.SignedString(jwtKey)
+
+	return
+}
+
+func ValidateToken(signedToken string) (err error) {
+	token, err := parseToken(signedToken)
 
 	if err != nil {
 		return
@@ -47,10 +61,36 @@ func ValidateToken(signedToken string) (err error) {
 		return
 	}
 
+	user := database.Instance.Where("email = ?", claims.Email)
+	if user == nil {
+		err = errors.New("can't find user data")
+		return
+	}
+
 	if claims.ExpiresAt < time.Now().Local().Unix() {
 		err = errors.New("token expired")
 		return
 	}
 
 	return
+}
+
+func DecodeToken(signedToken string) (claims jwt.Claims) {
+	token, err := parseToken(signedToken)
+
+	if err != nil {
+		err = errors.New("couldn't parse claims")
+		return
+	}
+
+	return token.Claims.(*JWTClaim)
+}
+
+func parseToken(signedToken string) (token *jwt.Token, err error) {
+
+	return jwt.ParseWithClaims(strings.Split(signedToken, "Bearer ")[1], &JWTClaim{},
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(jwtKey), nil
+		},
+	)
 }
